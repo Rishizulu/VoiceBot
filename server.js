@@ -8,6 +8,9 @@ const twilio = require('twilio');
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+app.use(express.static(__dirname));
+
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 /* ---------------- DB ---------------- */
 const db = mysql.createPool({
@@ -19,7 +22,6 @@ const db = mysql.createPool({
 
 /* ---------------- Gallabox ---------------- */
 const gallaboxConfig = {
-  accountId: process.env.GALLABOX_ACCOUNT_ID,
   apiKey: process.env.GALLABOX_API_KEY,
   apiSecret: process.env.GALLABOX_API_SECRET,
   channelId: process.env.GALLABOX_CHANNEL_ID,
@@ -27,32 +29,36 @@ const gallaboxConfig = {
 };
 
 async function sendMessage(to, name, message) {
-  console.log("📤 Sending WhatsApp to:", to, message);
-
   const payload = {
     channelId: gallaboxConfig.channelId,
     channelType: "whatsapp",
     recipient: { name, phone: to },
-    whatsapp: {
-      type: "text",
-      text: { body: message }
-    }
+    whatsapp: { type: "text", text: { body: message } }
   };
 
-  const response = await axios.post(
-    `${gallaboxConfig.baseUrl}/messages/whatsapp`,
-    payload,
-    {
-      headers: {
-        apiKey: gallaboxConfig.apiKey,
-        apiSecret: gallaboxConfig.apiSecret,
-        'Content-Type': 'application/json'
-      }
+  return axios.post(`${gallaboxConfig.baseUrl}/messages/whatsapp`, payload, {
+    headers: {
+      apiKey: gallaboxConfig.apiKey,
+      apiSecret: gallaboxConfig.apiSecret,
+      'Content-Type': 'application/json'
     }
-  );
-
-  return response.data;
+  });
 }
+
+/* ---------------- Outbound Call API ---------------- */
+app.get('/call/:number', async (req, res) => {
+  const to = "+" + req.params.number;
+  try {
+    const call = await client.calls.create({
+      url: `${process.env.BASE_URL}/voice`,
+      to,
+      from: process.env.TWILIO_PHONE
+    });
+    res.json({ success: true, sid: call.sid });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
 
 /* ---------------- Voice Menu ---------------- */
 app.post('/voice', (req, res) => {
@@ -85,7 +91,7 @@ app.post('/voice', (req, res) => {
 app.post('/process', async (req, res) => {
   const digit = req.body.Digits;
   const from = req.body.From;
-  const waNumber = from.replace('+', '').replace('whatsapp:', '');
+  const waNumber = from.replace('+','').replace('whatsapp:','');
 
   const map = {
     "1": "Jhula",
@@ -101,39 +107,31 @@ app.post('/process', async (req, res) => {
   };
 
   const selected = map[digit];
-  let message = "Invalid option selected.";
+  let message = "Invalid option.";
 
   if (selected) {
     const [rows] = await db.query(
-      `SELECT cat1_names 
-       FROM u130660877_zulu.galleries 
-       WHERE cat1_names IS NOT NULL 
-       AND cat1_names LIKE ? 
-       LIMIT 1`,
+      `SELECT cat1_names FROM u130660877_zulu.galleries 
+       WHERE cat1_names IS NOT NULL AND cat1_names LIKE ? LIMIT 1`,
       [`%${selected}%`]
     );
 
-    if (rows.length > 0) {
+    if (rows.length) {
       message = `Products for ${selected}: ${rows[0].cat1_names}`;
 
-      // WhatsApp send in background
       sendMessage(waNumber, "Customer", message)
-        .then(() => console.log("✅ Gallabox WhatsApp sent"))
-        .catch(err => console.error("❌ Gallabox Error:", err.response?.data || err.message));
-    } else {
-      message = `No products found for ${selected}`;
+        .then(() => console.log("📤 WhatsApp sent"))
+        .catch(e => console.log("❌ Gallabox error", e.response?.data));
     }
   }
 
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say(message);
-  twiml.redirect('/voice'); // same call repeat menu
+  twiml.redirect('/voice');
 
   res.type('text/xml');
   res.send(twiml.toString());
 });
 
 /* ---------------- Start ---------------- */
-app.listen(3000, () => {
-  console.log("🚀 Zulu Voice + Gallabox Bot running on port 3000");
-});
+app.listen(3000, () => console.log("🚀 Server running on 3000"));
