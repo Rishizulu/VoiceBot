@@ -3,7 +3,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
-const cron = require('node-cron');
 const twilio = require('twilio');
 
 const app = express();
@@ -28,45 +27,38 @@ const gallaboxConfig = {
 };
 
 async function sendMessage(to, name, message) {
+  console.log("📤 Sending WhatsApp to:", to, message);
+
   const payload = {
     channelId: gallaboxConfig.channelId,
     channelType: "whatsapp",
     recipient: { name, phone: to },
-    whatsapp: { type: "text", text: { body: message } }
+    whatsapp: {
+      type: "text",
+      text: { body: message }
+    }
   };
 
-  await axios.post(`${gallaboxConfig.baseUrl}/messages/whatsapp`, payload, {
-    headers: {
-      apiKey: gallaboxConfig.apiKey,
-      apiSecret: gallaboxConfig.apiSecret,
-      'Content-Type': 'application/json'
+  const response = await axios.post(
+    `${gallaboxConfig.baseUrl}/messages/whatsapp`,
+    payload,
+    {
+      headers: {
+        apiKey: gallaboxConfig.apiKey,
+        apiSecret: gallaboxConfig.apiSecret,
+        'Content-Type': 'application/json'
+      }
     }
-  });
+  );
+
+  return response.data;
 }
 
-/* ---------------- Load Categories ---------------- */
-async function getCategories() {
-  const [rows] = await db.query(`
-    SELECT id, cat1_names 
-    FROM u130660877_zulu.galleries
-    WHERE cat1_names IS NOT NULL
-  `);
-  return rows;
-}
-
-/* ---------------- Vercel Blob Sync (Daily) ---------------- */
-cron.schedule('0 8 * * *', async () => {
-  console.log("⏰ Morning DB Sync Started");
-  const data = await getCategories();
-  await axios.post(process.env.BLOB_READ_WRITE_TOKEN, { data });
-  console.log("☁ Blob Updated");
-});
-
-/* ---------------- Voice Bot ---------------- */
+/* ---------------- Voice Menu ---------------- */
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
-  twiml.say("Hi this is Zulu Assistant.");
+  twiml.say("Hi, this is Zulu Assistant.");
   twiml.say("Press 1 for Jhula.");
   twiml.say("Press 2 for Mudha.");
   twiml.say("Press 3 for Dilli ki Sardi.");
@@ -78,20 +70,22 @@ app.post('/voice', (req, res) => {
   twiml.say("Press 9 for Cushion.");
   twiml.say("Press 10 for Vase.");
 
-  const gather = twiml.gather({
+  twiml.gather({
     numDigits: 2,
+    timeout: 10,
     action: '/process',
-    method: 'POST',
-    timeout: 10
+    method: 'POST'
   });
 
   res.type('text/xml');
   res.send(twiml.toString());
 });
 
+/* ---------------- Process Key ---------------- */
 app.post('/process', async (req, res) => {
   const digit = req.body.Digits;
   const from = req.body.From;
+  const waNumber = from.replace('+', '').replace('whatsapp:', '');
 
   const map = {
     "1": "Jhula",
@@ -107,17 +101,25 @@ app.post('/process', async (req, res) => {
   };
 
   const selected = map[digit];
-  let message = "Invalid option.";
+  let message = "Invalid option selected.";
 
   if (selected) {
     const [rows] = await db.query(
-      `SELECT cat1_names FROM u130660877_zulu.galleries WHERE cat1_names LIKE ? LIMIT 1`,
+      `SELECT cat1_names 
+       FROM u130660877_zulu.galleries 
+       WHERE cat1_names IS NOT NULL 
+       AND cat1_names LIKE ? 
+       LIMIT 1`,
       [`%${selected}%`]
     );
 
-    if (rows.length) {
+    if (rows.length > 0) {
       message = `Products for ${selected}: ${rows[0].cat1_names}`;
-      await sendMessage(from.replace('+',''), "Customer", message);
+
+      // WhatsApp send in background
+      sendMessage(waNumber, "Customer", message)
+        .then(() => console.log("✅ Gallabox WhatsApp sent"))
+        .catch(err => console.error("❌ Gallabox Error:", err.response?.data || err.message));
     } else {
       message = `No products found for ${selected}`;
     }
@@ -125,33 +127,7 @@ app.post('/process', async (req, res) => {
 
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say(message);
-  twiml.redirect('/voice'); // same call loop
-
-  res.type('text/xml');
-  res.send(twiml.toString());
-});
-
-/* ---------------- Process Speech ---------------- */
-app.post('/process', async (req, res) => {
-  const speech = req.body.SpeechResult || '';
-  const from = req.body.From;
-
-  const [rows] = await db.query(`
-    SELECT cat1_names FROM u130660877_zulu.galleries 
-    WHERE cat1_names LIKE ?
-    LIMIT 1
-  `, [`%${speech}%`]);
-
-  let message = "Sorry, no matching category found.";
-
-  if (rows.length > 0) {
-    message = `Here are products for ${speech}: ${rows[0].cat1_names}`;
-    await sendMessage(from.replace('+', ''), "Customer", message);
-  }
-
-  const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say(message);
-  twiml.redirect('/voice'); // Loop again in same call
+  twiml.redirect('/voice'); // same call repeat menu
 
   res.type('text/xml');
   res.send(twiml.toString());
@@ -159,5 +135,5 @@ app.post('/process', async (req, res) => {
 
 /* ---------------- Start ---------------- */
 app.listen(3000, () => {
-  console.log("🚀 Voice Bot running on http://localhost:3000");
+  console.log("🚀 Zulu Voice + Gallabox Bot running on port 3000");
 });
