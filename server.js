@@ -111,8 +111,8 @@ app.post('/process', async (req, res) => {
 
   if (selected) {
     const [rows] = await db.query(
-      `SELECT cat1_names FROM u130660877_zulu.galleries 
-       WHERE cat1_names IS NOT NULL AND cat1_names LIKE ? LIMIT 1`,
+      `SELECT id, cat1_names FROM u130660877_zulu.galleries 
+       WHERE cat1_names IS NOT NULL`,
       [`%${selected}%`]
     );
 
