@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 const twilio = require('twilio');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -132,5 +133,8 @@ app.post('/process', async (req, res) => {
   res.type('text/xml');
   res.send(twiml.toString());
 });
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-app.listen(3000, () => console.log("Server running on 3000"));
+module.exports = app;
