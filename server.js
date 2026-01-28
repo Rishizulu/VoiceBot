@@ -58,7 +58,7 @@ async function getCategories() {
 cron.schedule('0 8 * * *', async () => {
   console.log("⏰ Morning DB Sync Started");
   const data = await getCategories();
-  await axios.post(process.env.VERCEL_BLOB_API, { data });
+  await axios.post(process.env.BLOB_READ_WRITE_TOKEN, { data });
   console.log("☁ Blob Updated");
 });
 
