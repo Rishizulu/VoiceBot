@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Zulu Call Panel</title>
+</head>
+<body>
+  <h2>📞 Auto Call</h2>
+
+  <button onclick="call('919717350080')">Call +91 97173 50080</button><br><br>
+  <button onclick="call('918368127760')">Call +91 8368127760</button>
+
+  <script>
+    function call(num){
+      fetch('/call/' + num)
+        .then(r => r.json())
+        .then(d => alert(d.success ? "Calling..." : d.error));
+    }
+  </script>
+</body>
+</html>
