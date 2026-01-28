@@ -63,20 +63,69 @@ cron.schedule('0 8 * * *', async () => {
 });
 
 /* ---------------- Voice Bot ---------------- */
-app.post('/voice', async (req, res) => {
+app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
-  twiml.say("Hi, this is Zulu Assistant. Please say a product name.");
-  
+  twiml.say("Hi this is Zulu Assistant.");
+  twiml.say("Press 1 for Jhula.");
+  twiml.say("Press 2 for Mudha.");
+  twiml.say("Press 3 for Dilli ki Sardi.");
+  twiml.say("Press 4 for Jharna.");
+  twiml.say("Press 5 for Art.");
+  twiml.say("Press 6 for Ghadi.");
+  twiml.say("Press 7 for Kaleen.");
+  twiml.say("Press 8 for Lantern.");
+  twiml.say("Press 9 for Cushion.");
+  twiml.say("Press 10 for Vase.");
+
   const gather = twiml.gather({
-    input: 'speech',
-    timeout: 5,
-    speechTimeout: 'auto',
+    numDigits: 2,
     action: '/process',
-    method: 'POST'
+    method: 'POST',
+    timeout: 10
   });
 
-  gather.say("You can say: Jhula, Mudha, Kaleen, Lantern, Cushion, Table, Vase and more.");
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+app.post('/process', async (req, res) => {
+  const digit = req.body.Digits;
+  const from = req.body.From;
+
+  const map = {
+    "1": "Jhula",
+    "2": "Mudha",
+    "3": "Dilli ki Sardi",
+    "4": "Jharna",
+    "5": "Art",
+    "6": "Ghadi",
+    "7": "Kaleen",
+    "8": "Lantern",
+    "9": "Cushion",
+    "10": "Vase"
+  };
+
+  const selected = map[digit];
+  let message = "Invalid option.";
+
+  if (selected) {
+    const [rows] = await db.query(
+      `SELECT cat1_names FROM u130660877_zulu.galleries WHERE cat1_names LIKE ? LIMIT 1`,
+      [`%${selected}%`]
+    );
+
+    if (rows.length) {
+      message = `Products for ${selected}: ${rows[0].cat1_names}`;
+      await sendMessage(from.replace('+',''), "Customer", message);
+    } else {
+      message = `No products found for ${selected}`;
+    }
+  }
+
+  const twiml = new twilio.twiml.VoiceResponse();
+  twiml.say(message);
+  twiml.redirect('/voice'); // same call loop
 
   res.type('text/xml');
   res.send(twiml.toString());
