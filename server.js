@@ -61,28 +61,31 @@ app.get('/call/:number', async (req, res) => {
   }
 });
 
-/* ---------- IVR Menu ---------- */
+/* ---------- IVR Menu (FIXED) ---------- */
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
   twiml.say("Hi, this is Zulu Assistant.");
-  twiml.say("Press 1 for Jhula.");
-  twiml.say("Press 2 for Mudha.");
-  twiml.say("Press 3 for Dilli ki Sardi.");
-  twiml.say("Press 4 for Jharna.");
-  twiml.say("Press 5 for Art.");
-  twiml.say("Press 6 for Ghadi.");
-  twiml.say("Press 7 for Kaleen.");
-  twiml.say("Press 8 for Lantern.");
-  twiml.say("Press 9 for Cushion.");
-  twiml.say("Press 10 for Vase.");
 
-  twiml.gather({
+  const gather = twiml.gather({
     numDigits: 2,
     timeout: 10,
     action: '/process',
     method: 'POST'
   });
+
+  gather.say("Press 1 for Jhula.");
+  gather.say("Press 2 for Mudha.");
+  gather.say("Press 3 for Dilli ki Sardi.");
+  gather.say("Press 4 for Jharna.");
+  gather.say("Press 5 for Art.");
+  gather.say("Press 6 for Ghadi.");
+  gather.say("Press 7 for Kaleen.");
+  gather.say("Press 8 for Lantern.");
+  gather.say("Press 9 for Cushion.");
+  gather.say("Press 10 for Vase.");
+
+  twiml.say("No input received. Goodbye.");
 
   res.type('text/xml');
   res.send(twiml.toString());
@@ -123,16 +126,20 @@ app.post('/process', async (req, res) => {
       sendMessage(waNumber, "Customer", message)
         .then(() => console.log("WhatsApp sent"))
         .catch(e => console.log("Gallabox error", e.response?.data));
+    } else {
+      message = `No products found for ${selected}`;
     }
   }
 
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say(message);
-  twiml.redirect('/voice');
+  twiml.redirect('/voice'); // loop again in same call
 
   res.type('text/xml');
   res.send(twiml.toString());
 });
+
+/* ---------- Home Page ---------- */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
