@@ -12,7 +12,7 @@ app.use(express.static(__dirname));
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-/* ---------------- DB ---------------- */
+/* ---------- DB ---------- */
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -20,7 +20,7 @@ const db = mysql.createPool({
   database: process.env.DB_NAME
 });
 
-/* ---------------- Gallabox ---------------- */
+/* ---------- Gallabox ---------- */
 const gallaboxConfig = {
   apiKey: process.env.GALLABOX_API_KEY,
   apiSecret: process.env.GALLABOX_API_SECRET,
@@ -45,7 +45,7 @@ async function sendMessage(to, name, message) {
   });
 }
 
-/* ---------------- Outbound Call API ---------------- */
+/* ---------- Outbound Call ---------- */
 app.get('/call/:number', async (req, res) => {
   const to = "+" + req.params.number;
   try {
@@ -60,7 +60,7 @@ app.get('/call/:number', async (req, res) => {
   }
 });
 
-/* ---------------- Voice Menu ---------------- */
+/* ---------- IVR Menu ---------- */
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
@@ -87,11 +87,11 @@ app.post('/voice', (req, res) => {
   res.send(twiml.toString());
 });
 
-/* ---------------- Process Key ---------------- */
+/* ---------- Key Processing ---------- */
 app.post('/process', async (req, res) => {
   const digit = req.body.Digits;
   const from = req.body.From;
-  const waNumber = from.replace('+','').replace('whatsapp:','');
+  const waNumber = from.replace('+','');
 
   const map = {
     "1": "Jhula",
@@ -111,8 +111,8 @@ app.post('/process', async (req, res) => {
 
   if (selected) {
     const [rows] = await db.query(
-      `SELECT id, cat1_names FROM u130660877_zulu.galleries 
-       WHERE cat1_names IS NOT NULL`,
+      `SELECT cat1_names FROM u130660877_zulu.galleries 
+       WHERE cat1_names IS NOT NULL AND cat1_names LIKE ? LIMIT 1`,
       [`%${selected}%`]
     );
 
@@ -120,8 +120,8 @@ app.post('/process', async (req, res) => {
       message = `Products for ${selected}: ${rows[0].cat1_names}`;
 
       sendMessage(waNumber, "Customer", message)
-        .then(() => console.log("📤 WhatsApp sent"))
-        .catch(e => console.log("❌ Gallabox error", e.response?.data));
+        .then(() => console.log("WhatsApp sent"))
+        .catch(e => console.log("Gallabox error", e.response?.data));
     }
   }
 
@@ -133,5 +133,4 @@ app.post('/process', async (req, res) => {
   res.send(twiml.toString());
 });
 
-/* ---------------- Start ---------------- */
-app.listen(3000, () => console.log("🚀 Server running on 3000"));
+app.listen(3000, () => console.log("Server running on 3000"));
