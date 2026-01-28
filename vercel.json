@@ -6,12 +6,3 @@
     { "src": "/(voice|process|call/.*)", "dest": "/server.js" }
   ]
 }
-
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
-    }
-  ]
-}
